@@ -4,11 +4,11 @@ import time
 # dxpo grji cmsp zuir
 
 class SMTPPPico:
-	def __init__(self):
-		self.port:int=587
-		self.server:str="smtp.gmail.com"
-		self.sender:str="magnurnew@gmail.com"
-		self.key_16:str="dxpogrjicmspzuir"
+	def __init__(self, key_16:str, sender:str, server:str, port:int):
+		self.port:int=port
+		self.server:str=server
+		self.sender:str=sender
+		self.key_16:str=key_16
 		self.nl:str="\r\n"
 
 	def establish_socket(self) -> socket.socket:
@@ -47,45 +47,46 @@ class SMTPPPico:
 			raise Exception("Err validating email. Email recipient email must include '@' and '.'")
 		return
 
-	def format_message(self, message, recipient:str, subject:str):
-		self.validate_recipient_email(recipient)
-
-		smtp_commands = [
-			# b"EHLO sender.com\r\n", # should be done?
-			f"MAIL FROM:{self.sender}{self.nl}",
+	def build_smtp_commands(self, message, recipient:str, subject:str):
+		# assume OK
+		smtp_command = [
+			f"MAIL FROM:{self.sender}\r\n",
 			f"RCPT TO:{recipient}\r\n",
-			b"DATA\r\n",
-			(
+			"DATA\r\n",
+			bytes((
 			f"From: Alice {self.sender}\r\n"
 			f"To: Bob {recipient}\r\n"
 			f"Subject: {subject}\r\n"
-			f"Date: {time.gmtime()}\r\n" # spec dates/ types
-			f"Message-ID: <20261112120000.12345@sender.com>\r\n"
-			f"MIME-Version: 1.0\r\n"
-			f'Content-Type: text/plain; charset="utf-8"\r\n'
+			f"Date: {str(time.gmtime())}\r\n" # spec dates/ types
+			# f"Message-ID: <20261112120000.12345@sender.com>\r\n" # neccessary?
+			# f"MIME-Version: 1.0\r\n"
+			# f'Content-Type: text/plain; charset="utf-8"\r\n' # neccessary?
 			f"\r\n"
-			f"Hi Bob,\r\n"
-			f"\r\n"
-			f"Here is the update you asked for. The report is attached.\r\n"
-			f"\r\n"
-			f"Best,\r\n"
-			f"Alice\r\n"
-			f".\r\n"
-			),
-			f"QUIT{self.nl}",
+			f"{message}"
+			".\r\n"
+			), 'utf-8')
 		]
 
 
-	def send_email(self, sock:socket.socket, msg:str):
-		sock.send(f"{self.nl}{msg.encode("urf-8")}{self.nl}")
+	def send_email(self, sock:socket.socket, msg:str, recipient:str, email_subject:str):
+		self.validate_recipient_email(recipient)
+		commads = self.build_smtp_commands(msg, recipient, email_subject)
 
+		# send them all
+		# for mail_from, rcpt_to, data_cmd, payload in commads:
+		# 	for step in (mail_from, rcpt_to, data_cmd, payload):
+		# 		sock.sendall(step)
+		# 		response = sock.recv(1024)
+		# 		print(response.decode())
+
+		
+
+		sock.sendall(b"QUIT\r\n")
+		
+		return
+	
+	
 	def close_socket(self, sock:socket.socket) -> None:
 		sock.close()
 		return
-	
-	def wrap_socket(self):
-		'''
-		
-		Wrap the socekt in security
-		'''
-		pass
+
