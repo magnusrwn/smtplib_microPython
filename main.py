@@ -5,7 +5,7 @@ import binascii
 
 
 class SMTPPPico:
-	def __init__(self, key_16:str, sender_email:str, server:str, port:int, name:str):
+	def __init__(self, key_16:str, sender_email:str, name:str, port:int = 587, server:str = 'smtp.gmail.com'):
 		self.port:int=port
 		self.sender_email:str=sender_email
 		self.server:str=server
@@ -62,19 +62,19 @@ class SMTPPPico:
 		
 		return ssl_sock
 	
-	def send_email(self, sock:socket.socket, email_msg:str, recipient:str, email_subject:str):
-		self.__validate_recipient_email(recipient)
+	def send_email(self, sock:socket.socket, email_msg:str, email_recipient:str, email_subject:str, recipient_name:str):
+		self.__validate_recipient_email(email_recipient)
 
 		smtp_command =[
 			f"AUTH LOGIN{self.nl}",
 			f"{bytes.decode(self.__encode_to_base_64(self.sender_email), 'ascii')}{self.nl}",
 			f"{bytes.decode(self.__encode_to_base_64(self.key_16), 'ascii')}{self.nl}",
 			f"MAIL FROM:<{self.sender_email}>\r\n",
-			f"RCPT TO:<{recipient}>\r\n",
+			f"RCPT TO:<{email_recipient}>\r\n",
 			"DATA\r\n",
 			(
-			f"From: <{self.sender_email}>\r\n"
-			f"To: <{recipient}>\r\n"
+			f"From:{self.name} <{self.sender_email}>\r\n"
+			f"To:{recipient_name} <{email_recipient}>\r\n"
 			f"Subject: {email_subject}\r\n"
 			f"Date: {str(time.gmtime())}\r\n"
 			f"\r\n"
@@ -85,8 +85,12 @@ class SMTPPPico:
 		]
 
 		for cmd in smtp_command:
+			print(cmd)
+			print("\n")
 			sock.sendall(bytes(cmd, 'utf-8'))
 			reci = sock.recv(1042).decode()
+			print(reci)
+			print("\n")
 			if reci[0] not in {'3', '2'}:
 				raise Exception(f'Error in executing email-sending-commands')
 		
