@@ -1,17 +1,28 @@
 import socket
 import time
-# goog shi (below)
-# dxpo grji cmsp zuir
+import ssl
+import binascii
+
 
 class SMTPPPico:
-	def __init__(self, key_16:str, sender:str, server:str, port:int):
+	def __init__(self, key_16:str, sender_email:str, server:str, port:int, name:str):
 		self.port:int=port
+		self.sender_email:str=sender_email
 		self.server:str=server
-		self.sender:str=sender
 		self.key_16:str=key_16
 		self.nl:str="\r\n"
+		self.name = name
 
-	def establish_socket(self) -> socket.socket:
+	def __encode_to_base_64(self, text:str):
+		return (binascii.b2a_base64(text.encode('utf-8'))).strip()
+
+	def __validate_recipient_email(self, recip:str) -> None:
+		necessary_chars = ['.', '@']
+		if not all(c in recip for c in necessary_chars):
+			raise Exception("Err validating email. Email recipient email must include '@' and '.'")
+		return
+	
+	def establish_socket(self):
 		gmail_smtp_ip = socket.getaddrinfo(self.server, self.port, socket.AF_INET)[0][-1]
 		
 		sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -22,7 +33,7 @@ class SMTPPPico:
 		if reci[0][:1] != '2':
 			raise Exception('Err with establsihing smtp connection\nReturning')
 
-		msg = f"HELO Magnuss-MacBook-Air.local{self.nl}"
+		msg = f"EHLO Magnuss-MacBook-Air.local{self.nl}"
 
 		sock.sendall(msg.encode("utf-8"))
 		reci = sock.recv(1024).decode().split(" ")
@@ -32,59 +43,54 @@ class SMTPPPico:
 			raise Exception('Err with establsihing smtp connection\nReturning')
 		return sock
 
-	def add_tls(self, sock:socket.socket) -> socket.socket:
+	def add_tls_ssl(self, sock:socket.socket) -> socket.socket:
 		msg = f"STARTTLS{self.nl}"
 		sock.sendall(msg.encode("utf-8"))
 		reci = sock.recv(1042).decode().split(" ")
 		reci_code = reci[0]
-		if reci_code[0] != '2':
+		if reci_code != '220':
 			raise Exception('Err with establsihing TLS on socket')
-		return sock
 
-	def validate_recipient_email(self, recip:str) -> None:
-		necessary_chars = ['.', '@']
-		if not all(c in recip for c in necessary_chars):
-			raise Exception("Err validating email. Email recipient email must include '@' and '.'")
-		return
+		context = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
+		context.verify_mode = ssl.CERT_NONE
 
-	def build_smtp_commands(self, message, recipient:str, subject:str):
-		# assume OK
-		smtp_command = [
-			f"MAIL FROM:{self.sender}\r\n",
-			f"RCPT TO:{recipient}\r\n",
+		ssl_sock = context.wrap_socket(sock, server_hostname=self.server)
+
+		ssl_sock.sendall(f"EHLO Magnuss-MacBook-Air.local{self.nl}".encode('utf-8'))
+		reci = ssl_sock.recv(1024)
+		print(f"SSL/TSL AUTH RECI: {reci}")
+		
+		return ssl_sock
+	
+	def send_email(self, sock:socket.socket, email_msg:str, recipient:str, email_subject:str):
+		self.__validate_recipient_email(recipient)
+
+		smtp_command =[
+			f"AUTH LOGIN{self.nl}",
+			f"{bytes.decode(self.__encode_to_base_64(self.sender_email), 'ascii')}{self.nl}",
+			f"{bytes.decode(self.__encode_to_base_64(self.key_16), 'ascii')}{self.nl}",
+			f"MAIL FROM:<{self.sender_email}>\r\n",
+			f"RCPT TO:<{recipient}>\r\n",
 			"DATA\r\n",
-			bytes((
-			f"From: Alice {self.sender}\r\n"
-			f"To: Bob {recipient}\r\n"
-			f"Subject: {subject}\r\n"
-			f"Date: {str(time.gmtime())}\r\n" # spec dates/ types
-			# f"Message-ID: <20261112120000.12345@sender.com>\r\n" # neccessary?
-			# f"MIME-Version: 1.0\r\n"
-			# f'Content-Type: text/plain; charset="utf-8"\r\n' # neccessary?
+			(
+			f"From: <{self.sender_email}>\r\n"
+			f"To: <{recipient}>\r\n"
+			f"Subject: {email_subject}\r\n"
+			f"Date: {str(time.gmtime())}\r\n"
 			f"\r\n"
-			f"{message}"
+			f"{email_msg}\r\n"
 			".\r\n"
-			), 'utf-8')
+			),
+			"QUIT\r\n"
 		]
 
-
-	def send_email(self, sock:socket.socket, msg:str, recipient:str, email_subject:str):
-		self.validate_recipient_email(recipient)
-		commads = self.build_smtp_commands(msg, recipient, email_subject)
-
-		# send them all
-		# for mail_from, rcpt_to, data_cmd, payload in commads:
-		# 	for step in (mail_from, rcpt_to, data_cmd, payload):
-		# 		sock.sendall(step)
-		# 		response = sock.recv(1024)
-		# 		print(response.decode())
-
-		
-
-		sock.sendall(b"QUIT\r\n")
+		for cmd in smtp_command:
+			sock.sendall(bytes(cmd, 'utf-8'))
+			reci = sock.recv(1042).decode()
+			if reci[0] not in {'3', '2'}:
+				raise Exception(f'Error in executing email-sending-commands')
 		
 		return
-	
 	
 	def close_socket(self, sock:socket.socket) -> None:
 		sock.close()
