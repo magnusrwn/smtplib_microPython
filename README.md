@@ -1,4 +1,4 @@
-### Rasp Pi Pico W SMTP module
+# Rasp Pi Pico W SMTP module
 
 
 Others exist but I wanted to hand-code this for "fun"
@@ -13,7 +13,7 @@ Here are my terribel and short docs:
   - The above methods are ran in that order... usually...
   - Always close the socket
 
-  ## Ipnuts in object definition
+## Ipnuts in object definition
   - key_16:str, your google App Password
   - sender_email:str, your email
   - server:str, the server you want to sue to send the email (e.g., 'smtl.gmail.com')
